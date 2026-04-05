@@ -23,12 +23,15 @@ const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 async function fetchApprovalStatus(userId: string): Promise<boolean> {
-  const [adminRes, memberRes] = await Promise.all([
-    supabase.rpc("has_role", { _user_id: userId, _role: "admin" } as any),
-    supabase.rpc("has_role", { _user_id: userId, _role: "member" } as any),
-  ]);
+  const { data, error } = await supabase
+  .from("user_roles")
+  .select("role, approved")
+  .eq("user_id", userId)
+  .single();
 
-  return Boolean(adminRes.data) || Boolean(memberRes.data);
+console.log("ROLE DATA:", data);
+
+  return !!data && data.approved === true;
 }
 
 function AppRoutes() {
