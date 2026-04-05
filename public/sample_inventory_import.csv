@@ -1,0 +1,4 @@
+imei,brand,model,ram,storage,color,condition,purchase_source,purchase_price,purchase_date,warranty_status,warranty_expiry,status,supplier_id,notes
+860000000000001,Apple,iPhone 13,4GB,128GB,Blue,Used,Customer,28500,2026-03-10,No Warranty,,In Stock,,Imported sample row 1
+860000000000002,Samsung,Galaxy S23,8GB,256GB,Black,Refurbished,Dealer,31500,2026-03-12,Under Warranty,2027-03-12,In Stock,,Imported sample row 2
+860000000000003,Xiaomi,Redmi Note 13,6GB,128GB,Green,New,Dealer,16500,2026-03-20,Under Warranty,2027-03-20,In Stock,,Imported sample row 3

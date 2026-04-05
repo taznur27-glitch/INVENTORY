@@ -5,13 +5,75 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Smartphone } from "lucide-react";
+import { Smartphone, User } from "lucide-react";
 
 export default function Auth() {
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+ const guestEmail = import.meta.env.VITE_GUEST_EMAIL as string | undefined;
+  const guestPassword = import.meta.env.VITE_GUEST_PASSWORD as string | undefined;
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    try {
+      const credentialCandidates: Array<{ email: string; password: string; source: string }> = [];
+
+      if (email.trim() && password.trim()) {
+        credentialCandidates.push({
+          email: email.trim(),
+          password: password.trim(),
+          source: "form",
+        });
+      }
+
+      if (guestEmail && guestPassword) {
+        const hasSameCredentials = credentialCandidates.some(
+          (candidate) => candidate.email === guestEmail && candidate.password === guestPassword
+        );
+
+        if (!hasSameCredentials) {
+          credentialCandidates.push({
+            email: guestEmail,
+            password: guestPassword,
+            source: "env",
+          });
+        }
+      }
+
+      for (const candidate of credentialCandidates) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: candidate.email,
+          password: candidate.password,
+        });
+
+        if (!error) {
+          toast.success(
+            candidate.source === "form"
+              ? "Logged in with provided guest credentials."
+              : "Logged in with guest demo account."
+          );
+          return;
+        }
+      }
+
+      const { error: anonymousError } = await supabase.auth.signInAnonymously();
+      if (!anonymousError) {
+        toast.success("Logged in as guest. Your data is temporary for this session.");
+        return;
+      }
+
+      throw new Error(
+        `${anonymousError.message}. Use a guest email/password in the form, or set VITE_GUEST_EMAIL and VITE_GUEST_PASSWORD.`
+      );
+    } catch (error: any) {
+      toast.error(error.message || "Guest login failed. Check Supabase auth configuration.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,12 +136,24 @@ export default function Auth() {
             </Button>
           </form>
 
-          {mode === 'login' && (
+          {mode === 'login' && ( 
+            <>
             <div className="mt-3 text-center">
-              <button type="button" onClick={() => setMode('forgot')} className="text-xs text-primary underline-offset-4 hover:underline">
-                Forgot Password?
-              </button>
-            </div>
+                <button type="button" onClick={() => setMode('forgot')} className="text-xs text-primary underline-offset-4 hover:underline">
+                  Forgot Password?
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <Button type="button" variant="outline" className="w-full" onClick={handleGuestLogin} disabled={loading}>
+                  <User className="mr-2 h-4 w-4" />
+                  {loading ? "Please wait..." : "Continue as Guest"}
+                </Button>
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  Guest button tries filled email/password first, then env demo credentials, then anonymous auth.
+                  </p>
+              </div>
+            </>
           )}
 
           <div className="mt-4 text-center text-sm text-muted-foreground">

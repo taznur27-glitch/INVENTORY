@@ -11,7 +11,9 @@ import StatusBadge from '@/components/StatusBadge';
 import PhoneTimeline from '@/components/PhoneTimeline';
 import ExportDialog from '@/components/ExportDialog';
 import PriceListGenerator from '@/components/PriceListGenerator';
+import BulkImportDialog from '@/components/inventory/BulkImportDialog';
 import type { InventoryItem } from '@/hooks/useData';
+import ImeiScanner from '@/components/ImeiScanner';
 
 const statusFilters = ['All', 'In Stock', 'Sold', 'Returned'] as const;
 const conditionFilters = ['All', 'New', 'Refurbished', 'Used'] as const;
@@ -125,11 +127,15 @@ export default function Inventory() {
       )}
 
       <div className="flex flex-col sm:flex-row gap-3 justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search IMEI, brand, model..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex flex-1 max-w-md gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Search IMEI, brand, model..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <ImeiScanner onScan={(imei) => setSearch(imei)} />
         </div>
         <div className="flex gap-2">
+           <BulkImportDialog />
           <PriceListGenerator />
           <ExportDialog
             data={exportData}

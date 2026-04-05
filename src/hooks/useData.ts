@@ -10,6 +10,36 @@ export type ReturnRecord = Tables<'returns'>;
 export type Transaction = Tables<'transactions'>;
 
 // ---- Helpers ----
+
+function normalizeStatus(status: string | null | undefined): string {
+  const raw = (status || '').trim().toLowerCase().replace(/[_\-]+/g, ' ');
+  if (raw === 'in stock' || raw === 'instock') return 'In Stock';
+  if (raw === 'sold') return 'Sold';
+  if (raw === 'returned') return 'Returned';
+  return status || 'In Stock';
+}
+
+
+async function assertAdminAccess() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Please login first');
+
+  const { data: isAdmin, error } = await supabase.rpc('has_role', {
+    _user_id: user.id,
+    _role: 'admin',
+  } as any);
+
+  if (error) throw error;
+  if (!isAdmin) throw new Error('Only admin can modify data. Contact your administrator.');
+}
+
+function normalizeInventoryItem(item: InventoryItem): InventoryItem {
+  return {
+    ...item,
+    status: normalizeStatus(item.status),
+  };
+}
+
 export function getStockAgeDays(purchaseDate: string): number {
   return Math.floor((Date.now() - new Date(purchaseDate).getTime()) / 86400000);
 }
@@ -47,6 +77,7 @@ export function useAddParty() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (party: TablesInsert<'parties'>) => {
+      await assertAdminAccess();
       const { data, error } = await supabase.from('parties').insert(party).select().single();
       if (error) throw error;
       return data;
@@ -62,7 +93,7 @@ export function useInventory() {
     queryFn: async () => {
       const { data, error } = await supabase.from('inventory').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return data as InventoryItem[];
+      return (data as InventoryItem[]).map(normalizeInventoryItem)
     },
   });
 }
@@ -71,6 +102,7 @@ export function useAddInventory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (item: TablesInsert<'inventory'>) => {
+      await assertAdminAccess();
       // Check IMEI uniqueness
       const { data: existing } = await supabase.from('inventory').select('imei').eq('imei', item.imei).maybeSingle();
       if (existing) throw new Error('This IMEI already exists in inventory');
@@ -96,6 +128,57 @@ export function useAddInventory() {
   });
 }
 
+
+
+export function useBulkImportInventory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: TablesInsert<'inventory'>[]) => {
+      await assertAdminAccess();
+      if (!items.length) return { inserted: 0, skipped: 0 };
+
+      const imeis = items.map((i) => i.imei);
+      const { data: existingRows, error: existingError } = await supabase
+        .from('inventory')
+        .select('imei')
+        .in('imei', imeis);
+
+      if (existingError) throw existingError;
+
+      const existingSet = new Set((existingRows || []).map((row) => row.imei));
+      const uniqueItems = items.filter((item, idx) => imeis.indexOf(item.imei) === idx);
+      const insertItems = uniqueItems.filter((item) => !existingSet.has(item.imei));
+
+      if (!insertItems.length) {
+        return { inserted: 0, skipped: items.length };
+      }
+
+      const { error: insertError } = await supabase.from('inventory').insert(insertItems);
+      if (insertError) throw insertError;
+
+      const transactions = insertItems.map((item) => ({
+        type: 'Purchase' as const,
+        imei: item.imei,
+        party_id: item.supplier_id || null,
+        txn_date: item.purchase_date,
+        amount: item.purchase_price,
+      }));
+
+      const { error: txError } = await supabase.from('transactions').insert(transactions);
+      if (txError) throw txError;
+
+      return {
+        inserted: insertItems.length,
+        skipped: items.length - insertItems.length,
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+}
+
 // ---- Sales ----
 export function useSales() {
   return useQuery({
@@ -112,6 +195,7 @@ export function useAddSale() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (sale: TablesInsert<'sales'>) => {
+      await assertAdminAccess();
       const { data, error } = await supabase.from('sales').insert(sale).select().single();
       if (error) throw error;
 
@@ -153,6 +237,7 @@ export function useAddReturn() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (ret: TablesInsert<'returns'>) => {
+      await assertAdminAccess();
       const { data, error } = await supabase.from('returns').insert(ret).select().single();
       if (error) throw error;
 
